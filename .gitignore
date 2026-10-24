@@ -1,0 +1,21 @@
+# Secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+# Node
+node_modules/
+frontend/dist/
+# Local and private material
+.DS_Store
+Thumbs.db
+*.zip
+cold-call-transcripts-100/
