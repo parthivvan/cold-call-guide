@@ -5,18 +5,27 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    # gunicorn with 2 uvicorn workers is the recommended production setup for FastAPI on Render.
+    # $PORT is injected automatically by Render.
+    startCommand: gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
     healthCheckPath: /health
     envVars:
       - key: SUPABASE_URL
-        sync: false
+        sync: false           # Set in Render dashboard
       - key: SUPABASE_SERVICE_KEY
-        sync: false
+        sync: false           # Set in Render dashboard
+      # After Vercel deploys the frontend, replace the placeholder below with the
+      # real URL (e.g. https://cold-call-guide.vercel.app) and redeploy.
+      # Multiple origins: comma-separated, no trailing slash.
       - key: ALLOWED_ORIGINS
-        value: http://localhost:5173
+        sync: false           # Set in Render dashboard — must be your Vercel URL
       - key: LLM_PROVIDER
         value: gemini
       - key: LLM_API_KEY
-        sync: false
+        sync: false           # Set in Render dashboard
       - key: LLM_MODEL
         value: gemini-2.0-flash
+      - key: LOG_LEVEL
+        value: INFO
+      - key: PYTHON_VERSION
+        value: "3.12"

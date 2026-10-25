@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -16,7 +16,10 @@ from postgrest.exceptions import APIError
 from supabase import Client, create_client
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 logger = logging.getLogger("cold_call_guide")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
@@ -45,11 +48,30 @@ OUTCOME_DEFINITIONS = {
     "not_logged": "Evidence is insufficient to assign another outcome",
 }
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-app = FastAPI(title="Cold-Call Guide API", version="1.0.0")
+
+if not LLM_API_KEY:
+    logger.warning("LLM_API_KEY is not set — suggest-outcome will fall back to rule-based logic.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Verify DB connectivity on startup so Render's health check fails fast if misconfigured."""
+    try:
+        result = supabase.table("stages").select("id").limit(1).execute()
+        logger.info("DB connectivity OK — %d stage row(s) visible.", len(result.data or []))
+    except Exception:
+        logger.exception("Startup DB check failed — verify SUPABASE_URL and SUPABASE_SERVICE_KEY.")
+        # Don't crash: Render will surface the health-check failure instead.
+    yield
+
+
+app = FastAPI(title="Cold-Call Guide API", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
-    CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "apikey"],
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class CreateCallBody(BaseModel):
@@ -149,8 +171,9 @@ def call_llm(context: str) -> dict:
             response.raise_for_status()
             text = response.json()["choices"][0]["message"]["content"]
         else:
+            model_name = LLM_MODEL.removeprefix("models/")
             response = client.post(
-                "https://generativelanguage.googleapis.com/v1beta/models/" + LLM_MODEL + ":generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/" + model_name + ":generateContent",
                 headers={"x-goog-api-key": LLM_API_KEY},
                 json={"contents": [{"parts": [{"text": prompt}]}],
                       "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}},
@@ -193,6 +216,8 @@ def create_call(body: CreateCallBody) -> dict:
 def record_stage(call_id: str, body: StageResultBody) -> dict:
     safe_id = validate_uuid(call_id)
     call = fetch_call(safe_id)
+    if call.get("ended_at") is not None:
+        raise HTTPException(status_code=409, detail="Cannot record a stage on a call that has already been closed.")
     fetch_stage(body.stage_id)
     next_stage = fetch_stage(body.next_stage_id)
     furthest_id = call.get("furthest_stage_id") or call.get("current_stage_id")
@@ -241,7 +266,9 @@ def suggest_outcome(call_id: str) -> dict:
 @app.post("/calls/{call_id}/close")
 def close_call(call_id: str, body: CloseCallBody) -> dict:
     safe_id = validate_uuid(call_id)
-    fetch_call(safe_id)
+    call = fetch_call(safe_id)
+    if call.get("ended_at") is not None:
+        raise HTTPException(status_code=409, detail="This call has already been closed.")
     if body.outcome not in ALLOWED_OUTCOMES:
         raise HTTPException(status_code=422, detail={"message": "Invalid outcome.", "allowed": sorted(ALLOWED_OUTCOMES)})
     result = execute(supabase.table("calls").update({
