@@ -1,12 +1,12 @@
-# Production dependencies — pinned for reproducible Render builds
+# Production dependencies — pin Supabase and PostgREST to compatible releases
 fastapi>=0.115.0,<1.0.0
 uvicorn[standard]>=0.30.0,<1.0.0
 gunicorn>=22.0.0,<24.0.0
-supabase>=2.9.0,<3.0.0
-httpx>=0.27.0,<1.0.0
+supabase==2.33.0
+postgrest==2.33.0
+httpx>=0.27.0,<0.29.0
 python-dotenv>=1.0.0,<2.0.0
 pydantic>=2.8.0,<3.0.0
-postgrest>=0.17.0,<1.0.0
 
 # Dev / test only (not needed on Render — install with: pip install pytest)
 # pytest>=8.0.0
