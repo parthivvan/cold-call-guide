@@ -6,4 +6,4 @@ async function request(path,options={}) {
  return data;
 }
 const post=body=>({method:'POST',body:JSON.stringify(body)});
-export const api={health:()=>request('/health'),stages:()=>request('/stages'),calls:()=>request('/calls'),createCall:b=>request('/calls',post(b)),saveStage:(id,b)=>request('/calls/'+encodeURIComponent(id)+'/stages',post(b)),suggest:id=>request('/calls/'+encodeURIComponent(id)+'/suggest-outcome',{method:'POST'}),close:(id,b)=>request('/calls/'+encodeURIComponent(id)+'/close',post(b))};
+export const api={health:()=>request('/'),stages:()=>request('/stages'),calls:()=>request('/calls'),createCall:b=>request('/calls',post(b)),saveStage:(id,b)=>request('/calls/'+encodeURIComponent(id)+'/stages',post(b)),suggest:id=>request('/calls/'+encodeURIComponent(id)+'/suggest-outcome',{method:'POST'}),close:(id,b)=>request('/calls/'+encodeURIComponent(id)+'/close',post(b))};
